@@ -1,5 +1,5 @@
 'use client'
-
+import CheckoutButton from './components/CheckoutButton'
 import { useState } from 'react'
 import { 
   Wifi, Battery, Zap, Shield, Users, Gamepad2, GraduationCap, Tv, Building2,
