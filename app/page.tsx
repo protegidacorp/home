@@ -250,9 +250,7 @@ function ProductSection() {
 
               <p className="text-xs text-gray-500 text-center">* Cargos adicionales e impuestos aplicables calculados en checkout</p>
 
-              <button className="btn-neon w-full text-center py-4 text-lg flex items-center justify-center gap-2">
-                <ShoppingCart className="w-5 h-5" /> Ordenar Ahora
-              </button>
+              <CheckoutButton />
               
               <div className="flex items-center justify-center gap-4 pt-2">
                 <div className="flex items-center gap-1 text-xs text-gray-500">
