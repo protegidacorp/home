@@ -20,9 +20,6 @@ const TAX_RATES = {
   exento: 'txr_1Sa0DxLWLRvIvTFUnxqvhNhl',
 }
 
-// Shipping Rate ID
-const SHIPPING_RATE = 'shr_1Sa0TPLWLRvIvTFUeXAbLDbf'
-
 export async function POST() {
   try {
     const session = await stripe.checkout.sessions.create({
@@ -61,14 +58,6 @@ export async function POST() {
           tax_rates: [TAX_RATES.exento],
         },
       ],
-      shipping_options: [
-        {
-          shipping_rate: SHIPPING_RATE,
-        },
-      ],
-      shipping_address_collection: {
-        allowed_countries: ['PR'],
-      },
       phone_number_collection: {
         enabled: true,
       },
