@@ -5,7 +5,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
 })
 
-const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL!
+const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/a95m54msqdkihux95duo5fulbc16k9vj'
 
 interface SubmitOrderInput {
   sessionId: string
@@ -46,8 +46,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Get payment method from payment intent
-    const paymentIntent = session.payment_intent as Stripe.PaymentIntent
-    const paymentMethodId = paymentIntent?.payment_method as string
+    const paymentIntent = session.payment_intent as Stripe.PaymentIntent | null
+    const paymentMethodId = paymentIntent?.payment_method?.toString() || ''
 
     // 3. Build address string
     const addressParts = [
@@ -84,12 +84,14 @@ export async function POST(request: Request) {
       address: fullAddress,
       
       // Stripe info
-      customer_id: session.customer as string,
+      customer_id: session.customer?.toString() || '',
       payment_method_id: paymentMethodId,
       
       // Timestamp
       fecha_orden: new Date().toISOString().split('T')[0],
     }
+
+    console.log('Sending to Make.com:', JSON.stringify(orderData, null, 2))
 
     const makeResponse = await fetch(MAKE_WEBHOOK_URL, {
       method: 'POST',
