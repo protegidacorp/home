@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         city: body.city,
         state: body.state || 'PR',
         zip: body.zip,
-        country: body.country || 'US',
+        country: body.country || 'PR',
         phone: body.phone || '',
         email: body.email || '',
         validate: true,
