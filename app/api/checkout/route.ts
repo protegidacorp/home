@@ -42,8 +42,8 @@ export async function POST() {
       payment_intent_data: {
         setup_future_usage: 'off_session',
       },
-      success_url: `${process.env.NEXT_PUBLIC_URL}/gracias?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_URL}/`,
+      success_url: `https://home-six-murex-57.vercel.app/gracias?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://home-six-murex-57.vercel.app/`,
     })
 
     return NextResponse.json({ url: session.url })

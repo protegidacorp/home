@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
+const SHIPPO_API_KEY = 'shippo_test_2f447db421f4463eb59befb723ea4300c24080ce'
 
 interface AddressInput {
   name: string
