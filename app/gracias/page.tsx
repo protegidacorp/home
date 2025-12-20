@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle2, Mail, ArrowLeft, Loader2, AlertCircle, Package, MapPin } from 'lucide-react'
+import { CheckCircle2, Mail, ArrowLeft, Loader2, AlertCircle, Package, MapPin, AlertTriangle } from 'lucide-react'
 
 interface ShippingForm {
   name: string
@@ -15,7 +15,27 @@ interface ShippingForm {
   email: string
 }
 
-type PageState = 'loading' | 'form' | 'submitting' | 'success' | 'error'
+interface SuggestedAddress {
+  street1: string
+  street2: string
+  city: string
+  state: string
+  zip: string
+}
+
+type PageState = 'loading' | 'form' | 'validating' | 'suggestion' | 'submitting' | 'success' | 'error'
+
+// Detectar si es PO Box
+function isPOBox(address: string): boolean {
+  const poBoxPatterns = [
+    /p\.?\s*o\.?\s*box/i,
+    /post\s*office\s*box/i,
+    /postal\s*box/i,
+    /apartado/i,
+    /apdo\.?/i,
+  ]
+  return poBoxPatterns.some(pattern => pattern.test(address))
+}
 
 export default function GraciasPage() {
   const searchParams = useSearchParams()
@@ -23,9 +43,8 @@ export default function GraciasPage() {
   
   const [pageState, setPageState] = useState<PageState>('loading')
   const [errorMessage, setErrorMessage] = useState('')
-  const [addressError, setAddressError] = useState('')
-  const [isValidating, setIsValidating] = useState(false)
-  const [addressValidated, setAddressValidated] = useState(false)
+  const [poBoxError, setPOBoxError] = useState(false)
+  const [suggestedAddress, setSuggestedAddress] = useState<SuggestedAddress | null>(null)
   
   const [form, setForm] = useState<ShippingForm>({
     name: '',
@@ -37,7 +56,6 @@ export default function GraciasPage() {
     email: '',
   })
 
-  // Check if session_id exists
   useEffect(() => {
     if (!sessionId) {
       setErrorMessage('No se encontró información del pedido')
@@ -47,25 +65,31 @@ export default function GraciasPage() {
     }
   }, [sessionId])
 
-  // Handle form changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
-    // Reset validation and errors when any field changes
-    setAddressValidated(false)
-    setAddressError('')
     setErrorMessage('')
+    setPOBoxError(false)
+    setSuggestedAddress(null)
   }
 
-  // Validate address with Shippo
+  // Validar dirección
   const validateAddress = async () => {
-    if (!form.name || !form.street1 || !form.city || !form.zip) {
-      setAddressError('Completa todos los campos requeridos')
-      return false
+    // Verificar campos requeridos
+    if (!form.name || !form.street1 || !form.city || !form.zip || !form.email || !form.phone) {
+      setErrorMessage('Completa todos los campos requeridos')
+      return
     }
 
-    setIsValidating(true)
-    setAddressError('')
+    // Verificar PO Box
+    if (isPOBox(form.street1) || isPOBox(form.street2)) {
+      setPOBoxError(true)
+      setErrorMessage('No podemos enviar a apartados postales (PO Box). Por favor usa una dirección física.')
+      return
+    }
+
+    setPageState('validating')
+    setErrorMessage('')
 
     try {
       const response = await fetch('/api/validate-address', {
@@ -87,32 +111,40 @@ export default function GraciasPage() {
       const data = await response.json()
 
       if (data.valid) {
-        setAddressValidated(true)
-        setAddressError('')
-        return true
+        // Dirección válida - enviar a Make.com
+        await submitOrder(form)
+      } else if (data.suggestion) {
+        // Hay sugerencia de USPS
+        setSuggestedAddress(data.suggestion)
+        setPageState('suggestion')
       } else {
-        setAddressError(data.error || 'Dirección no válida. Por favor verifica los datos.')
-        setAddressValidated(false)
-        return false
+        // Dirección inválida sin sugerencia
+        setErrorMessage(data.error || 'La dirección no pudo ser verificada. Por favor revisa los datos.')
+        setPageState('form')
       }
     } catch (error) {
-      setAddressError('Error al validar la dirección. Intenta de nuevo.')
-      return false
-    } finally {
-      setIsValidating(false)
+      setErrorMessage('Error al validar la dirección. Intenta de nuevo.')
+      setPageState('form')
     }
   }
 
-  // Submit order
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Aceptar sugerencia de USPS
+  const acceptSuggestion = async () => {
+    if (!suggestedAddress) return
     
-    // Validate address first if not already validated
-    if (!addressValidated) {
-      const isValid = await validateAddress()
-      if (!isValid) return
+    const correctedForm = {
+      ...form,
+      street1: suggestedAddress.street1,
+      street2: suggestedAddress.street2 || '',
+      city: suggestedAddress.city,
+      zip: suggestedAddress.zip,
     }
+    
+    await submitOrder(correctedForm)
+  }
 
+  // Enviar orden a Make.com
+  const submitOrder = async (shippingData: ShippingForm) => {
     setPageState('submitting')
 
     try {
@@ -122,15 +154,15 @@ export default function GraciasPage() {
         body: JSON.stringify({
           sessionId,
           shippingAddress: {
-            name: form.name,
-            street1: form.street1,
-            street2: form.street2,
-            city: form.city,
+            name: shippingData.name,
+            street1: shippingData.street1,
+            street2: shippingData.street2,
+            city: shippingData.city,
             state: 'PR',
-            zip: form.zip,
+            zip: shippingData.zip,
             country: 'PR',
-            phone: form.phone,
-            email: form.email,
+            phone: shippingData.phone,
+            email: shippingData.email,
           },
         }),
       })
@@ -149,7 +181,7 @@ export default function GraciasPage() {
     }
   }
 
-  // Loading state
+  // Loading
   if (pageState === 'loading') {
     return (
       <div className="min-h-screen bg-dark-900 flex items-center justify-center">
@@ -158,8 +190,8 @@ export default function GraciasPage() {
     )
   }
 
-  // Error state (no session)
-  if (pageState === 'error') {
+  // Error (no session)
+  if (pageState === 'error' && !sessionId) {
     return (
       <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4">
         <div className="max-w-lg w-full text-center">
@@ -168,10 +200,7 @@ export default function GraciasPage() {
           </div>
           <h1 className="font-display text-3xl font-bold text-white mb-4">Error</h1>
           <p className="text-gray-400 mb-8">{errorMessage}</p>
-          <Link 
-            href="/"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-yellow transition-colors"
-          >
+          <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-yellow transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <span>Volver al inicio</span>
           </Link>
@@ -180,7 +209,7 @@ export default function GraciasPage() {
     )
   }
 
-  // Success state
+  // Success
   if (pageState === 'success') {
     return (
       <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4">
@@ -188,16 +217,13 @@ export default function GraciasPage() {
           <div className="w-24 h-24 bg-neon-yellow/20 rounded-full flex items-center justify-center mx-auto mb-8 neon-glow">
             <CheckCircle2 className="w-12 h-12 text-neon-yellow" />
           </div>
-
           <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">
             <span className="text-white">¡Pedido </span>
             <span className="text-neon-yellow text-glow">confirmado!</span>
           </h1>
-
           <p className="text-gray-400 text-lg mb-8">
             Tu equipo está siendo preparado para envío. Recibirás un correo con el número de rastreo.
           </p>
-
           <div className="bg-dark-800 rounded-2xl p-6 mb-8 border border-electric-blue/20">
             <h2 className="font-display font-bold text-xl text-white mb-4">¿Qué sigue?</h2>
             <ul className="text-left space-y-3 text-gray-300">
@@ -215,19 +241,7 @@ export default function GraciasPage() {
               </li>
             </ul>
           </div>
-
-          <div className="mb-8">
-            <p className="text-gray-500 text-sm mb-3">¿Preguntas? Contáctanos:</p>
-            <a href="mailto:info@internetprotegida.net" className="flex items-center justify-center gap-2 text-electric-blue hover:text-neon-yellow transition-colors">
-              <Mail className="w-4 h-4" />
-              <span className="text-sm">info@internetprotegida.net</span>
-            </a>
-          </div>
-
-          <Link 
-            href="/"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-yellow transition-colors"
-          >
+          <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-neon-yellow transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <span>Volver al inicio</span>
           </Link>
@@ -236,11 +250,63 @@ export default function GraciasPage() {
     )
   }
 
-  // Form state (main view)
+  // Suggestion from USPS
+  if (pageState === 'suggestion' && suggestedAddress) {
+    return (
+      <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4 py-12">
+        <div className="max-w-lg w-full">
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-10 h-10 text-yellow-500" />
+            </div>
+            <h1 className="font-display text-3xl font-bold mb-2 text-white">
+              Verificación de dirección
+            </h1>
+            <p className="text-gray-400">
+              USPS sugiere una corrección a tu dirección
+            </p>
+          </div>
+
+          <div className="bg-dark-800 rounded-2xl p-6 border border-electric-blue/20 mb-6">
+            <h3 className="text-gray-400 text-sm mb-2">Tu dirección:</h3>
+            <p className="text-white mb-4">
+              {form.street1}{form.street2 ? `, ${form.street2}` : ''}<br />
+              {form.city}, PR {form.zip}
+            </p>
+
+            <h3 className="text-gray-400 text-sm mb-2">Dirección sugerida por USPS:</h3>
+            <p className="text-neon-yellow font-medium">
+              {suggestedAddress.street1}{suggestedAddress.street2 ? `, ${suggestedAddress.street2}` : ''}<br />
+              {suggestedAddress.city}, PR {suggestedAddress.zip}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={acceptSuggestion}
+              className="w-full bg-neon-yellow text-dark-900 font-bold py-4 rounded-lg hover:bg-yellow-400 transition-colors neon-glow"
+            >
+              Usar dirección sugerida
+            </button>
+            <button
+              onClick={() => {
+                setSuggestedAddress(null)
+                setPageState('form')
+              }}
+              className="w-full bg-dark-900 border border-gray-700 text-gray-300 font-medium py-3 rounded-lg hover:border-gray-500 transition-colors"
+            >
+              Volver y corregir mi dirección
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Form / Validating / Submitting
   return (
     <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4 py-12">
       <div className="max-w-lg w-full">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-neon-yellow/20 rounded-full flex items-center justify-center mx-auto mb-6 neon-glow">
             <CheckCircle2 className="w-10 h-10 text-neon-yellow" />
@@ -254,8 +320,7 @@ export default function GraciasPage() {
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-dark-800 rounded-2xl p-6 border border-electric-blue/20">
+        <div className="bg-dark-800 rounded-2xl p-6 border border-electric-blue/20">
           <div className="flex items-center gap-2 mb-6">
             <MapPin className="w-5 h-5 text-electric-blue" />
             <h2 className="font-display font-bold text-lg text-white">Dirección de Envío</h2>
@@ -263,14 +328,17 @@ export default function GraciasPage() {
 
           {/* Error banner */}
           {errorMessage && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-              <p className="text-red-400 text-sm">{errorMessage}</p>
+            <div className={`rounded-lg p-3 mb-4 flex items-start gap-2 ${poBoxError ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+              {poBoxError ? (
+                <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              )}
+              <p className={`text-sm ${poBoxError ? 'text-orange-400' : 'text-red-400'}`}>{errorMessage}</p>
             </div>
           )}
 
           <div className="space-y-4">
-            {/* Name */}
             <div>
               <label className="block text-gray-300 text-sm mb-1">Nombre completo *</label>
               <input
@@ -278,13 +346,12 @@ export default function GraciasPage() {
                 name="name"
                 value={form.name}
                 onChange={handleChange}
-                required
-                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                disabled={pageState === 'validating' || pageState === 'submitting'}
+                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                 placeholder="Juan Pérez"
               />
             </div>
 
-            {/* Email */}
             <div>
               <label className="block text-gray-300 text-sm mb-1">Email *</label>
               <input
@@ -292,13 +359,12 @@ export default function GraciasPage() {
                 name="email"
                 value={form.email}
                 onChange={handleChange}
-                required
-                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                disabled={pageState === 'validating' || pageState === 'submitting'}
+                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                 placeholder="tu@email.com"
               />
             </div>
 
-            {/* Phone */}
             <div>
               <label className="block text-gray-300 text-sm mb-1">Teléfono *</label>
               <input
@@ -306,13 +372,12 @@ export default function GraciasPage() {
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
-                required
-                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                disabled={pageState === 'validating' || pageState === 'submitting'}
+                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                 placeholder="787-123-4567"
               />
             </div>
 
-            {/* Street 1 */}
             <div>
               <label className="block text-gray-300 text-sm mb-1">Dirección línea 1 *</label>
               <input
@@ -320,13 +385,12 @@ export default function GraciasPage() {
                 name="street1"
                 value={form.street1}
                 onChange={handleChange}
-                required
-                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                disabled={pageState === 'validating' || pageState === 'submitting'}
+                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                 placeholder="123 Calle Principal"
               />
             </div>
 
-            {/* Street 2 */}
             <div>
               <label className="block text-gray-300 text-sm mb-1">Dirección línea 2 (opcional)</label>
               <input
@@ -334,12 +398,12 @@ export default function GraciasPage() {
                 name="street2"
                 value={form.street2}
                 onChange={handleChange}
-                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                disabled={pageState === 'validating' || pageState === 'submitting'}
+                className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                 placeholder="Apt, Suite, Urbanización..."
               />
             </div>
 
-            {/* City and Zip */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-gray-300 text-sm mb-1">Ciudad *</label>
@@ -348,8 +412,8 @@ export default function GraciasPage() {
                   name="city"
                   value={form.city}
                   onChange={handleChange}
-                  required
-                  className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                  disabled={pageState === 'validating' || pageState === 'submitting'}
+                  className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                   placeholder="San Juan"
                 />
               </div>
@@ -360,79 +424,40 @@ export default function GraciasPage() {
                   name="zip"
                   value={form.zip}
                   onChange={handleChange}
-                  required
+                  disabled={pageState === 'validating' || pageState === 'submitting'}
                   maxLength={5}
-                  className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors"
+                  className="w-full bg-dark-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-neon-yellow focus:outline-none transition-colors disabled:opacity-50"
                   placeholder="00901"
                 />
               </div>
             </div>
 
-            {/* Puerto Rico indicator */}
             <div className="bg-dark-900 rounded-lg px-4 py-2 text-gray-500 text-sm">
-              📍 Solo envíos a Puerto Rico
+              📍 Solo enviamos a direcciones físicas en Puerto Rico. No PO Box.
             </div>
 
-            {/* Address validation error */}
-            {addressError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-red-400 text-sm font-medium">Dirección no válida</p>
-                  <p className="text-red-400/70 text-sm">{addressError}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Address validated indicator */}
-            {addressValidated && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                <p className="text-green-400 text-sm">Dirección verificada correctamente</p>
-              </div>
-            )}
-
-            {/* Validate button */}
             <button
-              type="button"
               onClick={validateAddress}
-              disabled={isValidating || addressValidated}
-              className="w-full bg-dark-900 border border-electric-blue text-electric-blue font-medium py-3 rounded-lg hover:bg-electric-blue/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isValidating ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Verificando...
-                </>
-              ) : addressValidated ? (
-                <>
-                  <CheckCircle2 className="w-5 h-5" />
-                  Dirección verificada
-                </>
-              ) : (
-                'Verificar dirección'
-              )}
-            </button>
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={pageState === 'submitting'}
+              disabled={pageState === 'validating' || pageState === 'submitting'}
               className="w-full bg-neon-yellow text-dark-900 font-bold py-4 rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 neon-glow"
             >
-              {pageState === 'submitting' ? (
+              {pageState === 'validating' ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Procesando...
+                  Verificando dirección...
+                </>
+              ) : pageState === 'submitting' ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Procesando pedido...
                 </>
               ) : (
                 'Confirmar y enviar pedido'
               )}
             </button>
           </div>
-        </form>
+        </div>
 
-        {/* Contact */}
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm mb-2">¿Problemas con tu pedido?</p>
           <a href="mailto:info@internetprotegida.net" className="text-electric-blue hover:text-neon-yellow transition-colors text-sm">

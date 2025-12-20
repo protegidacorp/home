@@ -32,22 +32,27 @@ export default function CheckoutButton() {
   }
 
   return (
-    <button 
-      onClick={handleCheckout}
-      disabled={loading}
-      className="btn-neon w-full text-center py-4 text-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-    >
-      {loading ? (
-        <>
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Procesando...
-        </>
-      ) : (
-        <>
-          <ShoppingCart className="w-5 h-5" />
-          Ordenar Ahora
-        </>
-      )}
-    </button>
+    <div className="w-full">
+      <button 
+        onClick={handleCheckout}
+        disabled={loading}
+        className="btn-neon w-full text-center py-4 text-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Procesando...
+          </>
+        ) : (
+          <>
+            <ShoppingCart className="w-5 h-5" />
+            Ordenar Ahora
+          </>
+        )}
+      </button>
+      <p className="text-gray-500 text-xs text-center mt-2">
+        📍 Solo enviamos a direcciones físicas en Puerto Rico. No PO Box.
+      </p>
+    </div>
   )
 }

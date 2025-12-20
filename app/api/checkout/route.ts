@@ -34,7 +34,7 @@ export async function POST() {
       billing_address_collection: 'required',
       custom_text: {
         submit: {
-          message: 'Después del pago, te pediremos la dirección de envío. Tu servicio mensual ($69.99 + IVU) comenzará 5 días después de recibir el equipo.',
+          message: 'Solo enviamos a direcciones físicas en Puerto Rico (no PO Box). Después del pago te pediremos la dirección de envío. Tu servicio mensual ($69.99 + IVU) comenzará 5 días después de recibir el equipo.',
         },
       },
       // NUEVAS LÍNEAS: Crear customer y guardar tarjeta para cobros futuros
