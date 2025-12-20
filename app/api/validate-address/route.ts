@@ -47,7 +47,12 @@ export async function POST(request: Request) {
       }),
     })
 
-    const data = await response.json()
+        const data = await response.json()
+
+console.log('Shippo response:', JSON.stringify(data, null, 2))
+
+// Check validation result
+if (data.validation_results) {
 
     // Check validation result
     if (data.validation_results) {
