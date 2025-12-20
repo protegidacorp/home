@@ -51,11 +51,10 @@ export default function GraciasPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
-    // Reset validation when address fields change
-    if (['street1', 'street2', 'city', 'zip'].includes(name)) {
-      setAddressValidated(false)
-      setAddressError('')
-    }
+    // Reset validation and errors when any field changes
+    setAddressValidated(false)
+    setAddressError('')
+    setErrorMessage('')
   }
 
   // Validate address with Shippo
