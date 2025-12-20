@@ -40,26 +40,52 @@ export async function POST(request: Request) {
         city: body.city,
         state: body.state || 'PR',
         zip: body.zip,
-        country: body.country || 'PR',
+        country: body.country || 'US',
         phone: body.phone || '',
         email: body.email || '',
         validate: true,
       }),
     })
 
-        const data = await response.json()
+    const data = await response.json()
+    
+    console.log('Shippo response:', JSON.stringify(data, null, 2))
 
-console.log('Shippo response:', JSON.stringify(data, null, 2))
-
-// Check validation result
-if (data.validation_results) {
-
-    // Check validation result
-    if (data.validation_results) {
-      const validation = data.validation_results
+    // If we got an object_id, the address was created successfully
+    if (data.object_id) {
+      const validation = data.validation_results || {}
       
-      if (validation.is_valid) {
-        // Address is valid
+      // Check if there's a suggested correction
+      const originalStreet = body.street1.toLowerCase().trim()
+      const returnedStreet = (data.street1 || '').toLowerCase().trim()
+      const originalZip = body.zip.trim()
+      const returnedZip = (data.zip || '').trim()
+      
+      const hasCorrection = (returnedStreet !== originalStreet || returnedZip !== originalZip) && 
+                           data.street1 && data.city && data.zip
+
+      if (validation.is_valid === false && hasCorrection) {
+        // Invalid but has suggestion
+        return NextResponse.json({
+          valid: false,
+          suggestion: {
+            street1: data.street1,
+            street2: data.street2 || '',
+            city: data.city,
+            state: data.state,
+            zip: data.zip,
+          },
+        })
+      } else if (validation.is_valid === false) {
+        // Invalid without suggestion
+        const errorMsg = validation.messages?.map((m: any) => m.text).join('. ') || 
+                        'La dirección no pudo ser verificada. Revisa que sea correcta.'
+        return NextResponse.json({
+          valid: false,
+          error: errorMsg,
+        })
+      } else {
+        // Valid or no validation info (assume valid)
         return NextResponse.json({
           valid: true,
           address: {
@@ -73,61 +99,17 @@ if (data.validation_results) {
             object_id: data.object_id,
           },
         })
-      } else {
-        // Address is invalid - check for suggestions
-        // Shippo returns the corrected address in the response if available
-        const hasCorrection = data.street1 !== body.street1 || 
-                             data.city !== body.city || 
-                             data.zip !== body.zip
-        
-        if (hasCorrection && data.street1) {
-          // There's a suggested correction
-          return NextResponse.json({
-            valid: false,
-            suggestion: {
-              street1: data.street1,
-              street2: data.street2 || '',
-              city: data.city,
-              state: data.state,
-              zip: data.zip,
-            },
-            originalError: validation.messages?.map((m: { text: string }) => m.text).join('. '),
-          })
-        } else {
-          // No suggestion available
-          const errorMessages = validation.messages
-            ?.map((m: { text: string }) => m.text)
-            .join('. ') || 'Dirección no válida'
-          
-          return NextResponse.json({
-            valid: false,
-            error: errorMessages,
-          })
-        }
       }
     }
 
-    // If no validation results but address was created, assume it's usable
-    if (data.object_id) {
-      return NextResponse.json({
-        valid: true,
-        address: {
-          name: data.name,
-          street1: data.street1,
-          street2: data.street2,
-          city: data.city,
-          state: data.state,
-          zip: data.zip,
-          country: data.country,
-          object_id: data.object_id,
-        },
-      })
-    }
-
-    // Default error
+    // No object_id means error
+    const errorMsg = data.messages?.map((m: any) => m.text).join('. ') || 
+                    data.__all__?.join('. ') ||
+                    'Error al validar la dirección'
+    
     return NextResponse.json({
       valid: false,
-      error: 'No se pudo verificar la dirección',
+      error: errorMsg,
     })
 
   } catch (error) {
