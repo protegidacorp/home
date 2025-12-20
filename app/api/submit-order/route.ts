@@ -11,10 +11,10 @@ const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL!
 // Dirección de origen (tu negocio)
 const FROM_ADDRESS = {
   name: "Internet Protegida",
-  street1: "PO Box 195933",
-  city: "San Juan",
+  street1: "Villa Contessa Navarra B-25",
+  city: "Bayamon",
   state: "PR",
-  zip: "00919",
+  zip: "00956",
   country: "PR",
   phone: "7877177181",
   email: "protegidacorp@gmail.com"
