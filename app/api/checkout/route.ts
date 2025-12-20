@@ -32,12 +32,9 @@ export async function POST() {
         enabled: true,
       },
       billing_address_collection: 'required',
-      shipping_address_collection: {
-        allowed_countries: ['PR'],
-      },
       custom_text: {
         submit: {
-          message: 'Recibirás tu equipo en 3-5 días. Tu servicio mensual ($69.99 + IVU) comenzará 5 días después de recibir el paquete.',
+          message: 'Después del pago, te pediremos la dirección de envío. Tu servicio mensual ($69.99 + IVU) comenzará 5 días después de recibir el equipo.',
         },
       },
       // NUEVAS LÍNEAS: Crear customer y guardar tarjeta para cobros futuros
